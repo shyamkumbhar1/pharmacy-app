@@ -1,0 +1,18 @@
+# IDE
+.cursor/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AWS
+aws/*.csv
+aws/*.pem
+aws/*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
