@@ -59,14 +59,28 @@ DOCKER_DIR="$PROJECT_ROOT/Docker"
 
 # Detect if running on AWS EC2 and get public IP
 HOST_IP="localhost"
-if curl -s --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 > /dev/null 2>&1; then
-    HOST_IP=$(curl -s --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4)
+AWS_IP=""
+
+# Try to get AWS public IP from metadata service
+if AWS_IP=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null) && [ -n "$AWS_IP" ] && [[ "$AWS_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    HOST_IP="$AWS_IP"
     echo -e "${BLUE}🌐 Detected AWS EC2 instance. Using public IP: $HOST_IP${NC}"
     echo ""
 elif [ -n "${EC2_PUBLIC_IP:-}" ]; then
     HOST_IP="$EC2_PUBLIC_IP"
     echo -e "${BLUE}🌐 Using EC2 public IP from environment: $HOST_IP${NC}"
     echo ""
+else
+    # Try to get public IP from other methods
+    # Check if we can get it from hostname or external service
+    if command -v hostname &> /dev/null; then
+        HOSTNAME_IP=$(hostname -I 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$' | head -1)
+        if [ -n "$HOSTNAME_IP" ] && [[ ! "$HOSTNAME_IP" =~ ^127\. ]]; then
+            HOST_IP="$HOSTNAME_IP"
+            echo -e "${BLUE}🌐 Using host IP: $HOST_IP${NC}"
+            echo ""
+        fi
+    fi
 fi
 
 # Step 1: Create Docker network
