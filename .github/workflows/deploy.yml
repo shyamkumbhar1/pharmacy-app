@@ -15,8 +15,8 @@ jobs:
           host: ${{ secrets.AWS_HOST }}
           username: ubuntu
           key: ${{ secrets.AWS_SSH_KEY }}
-          script_timeout: 900
-          command_timeout: 300
+          timeout: 30s
+          command_timeout: 15m
           script: |
             set -e
             echo "🚀 Starting deployment..."
