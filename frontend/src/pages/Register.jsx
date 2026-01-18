@@ -5,6 +5,7 @@ import api from '../services/api'
 
 export default function Register() {
   const [name, setName] = useState('')
+  const [age, setAge] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [users, setUsers] = useState([])
@@ -31,19 +32,25 @@ export default function Register() {
     e.preventDefault()
     setError('')
 
-    if (!name.trim()) {
-      setError('Name is required')
+    if (!name.trim() || !age.trim()) {
+      setError('Name and Age are required')
+      return
+    }
+
+    if (parseInt(age) < 1 || parseInt(age) > 120) {
+      setError('Age must be between 1 and 120')
       return
     }
 
     setLoading(true)
 
     try {
-      const result = await register({ name })
+      const result = await register({ name, age: parseInt(age) })
       console.log('Registration success:', result)
       setError('')
       alert('Registration successful! Welcome ' + result.user.name)
       setName('')
+      setAge('')
       // Refresh users list
       await fetchUsers()
       setLoading(false)
@@ -77,6 +84,20 @@ export default function Register() {
               placeholder="Enter your name"
             />
           </div>
+          <div className="mb-6">
+            <label className="block text-gray-700 mb-2">Age</label>
+            <input
+              type="number"
+              name="age"
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              required
+              min="1"
+              max="120"
+              placeholder="Enter your age"
+            />
+          </div>
           <button
             type="submit"
             disabled={loading}
@@ -86,7 +107,7 @@ export default function Register() {
           </button>
         </form>
         <p className="mt-4 text-center text-gray-600">
-          Enter your name to register.
+          Enter your name and age to register.
         </p>
       </div>
 
@@ -105,7 +126,7 @@ export default function Register() {
                 className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border"
               >
                 <div>
-                  <p className="font-semibold text-gray-800">{user.name}</p>
+                  <p className="font-semibold text-gray-800">{user.name} {user.age && `(Age: ${user.age})`}</p>
                   <p className="text-sm text-gray-500">
                     Registered: {new Date(user.created_at).toLocaleDateString()}
                   </p>

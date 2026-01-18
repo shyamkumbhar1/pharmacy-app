@@ -11,10 +11,12 @@ class AuthController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255|unique:users,name',
+            'age' => 'required|integer|min:1|max:120',
         ]);
 
         $user = User::create([
             'name' => $validated['name'],
+            'age' => $validated['age'],
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
