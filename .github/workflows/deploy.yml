@@ -1,0 +1,56 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Safe Deploy to AWS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.AWS_HOST }}
+          username: ubuntu
+          key: ${{ secrets.AWS_SSH_KEY }}
+          script: |
+            cd ~/pharmacy-app
+            git pull
+            
+            cd Docker
+            
+            # Build new containers (old ones still running)
+            echo "🏗️ Building new containers..."
+            if ! docker-compose build; then
+              echo "❌ Build failed - keeping old containers running"
+              exit 1
+            fi
+            
+            # Only restart if build successful
+            echo "✅ Build successful - restarting containers"
+            docker-compose up -d
+            
+            # Health check - wait for services
+            echo "⏳ Waiting for services to start..."
+            sleep 10
+            
+            # Check backend health
+            if curl -f http://localhost:8000/api/users > /dev/null 2>&1; then
+              echo "✅ Backend health check passed"
+            else
+              echo "❌ Backend health check failed - rolling back"
+              docker-compose restart
+              exit 1
+            fi
+            
+            # Check frontend health
+            if curl -f http://localhost:3001 > /dev/null 2>&1; then
+              echo "✅ Frontend health check passed"
+            else
+              echo "❌ Frontend health check failed - rolling back"
+              docker-compose restart
+              exit 1
+            fi
+            
+            echo "✅ Deployment successful - all services running"
