@@ -91,8 +91,8 @@ else
 fi
 end_step "Step 2: Backend Environment"
 
-# Step 3: Frontend Setup
-time_step "Step 3: Frontend Build"
+# Step 3: Frontend Setup - Skip host build (Docker handles it)
+time_step "Step 3: Frontend Setup"
 echo -e "${YELLOW}📦 Setting up Frontend...${NC}"
 cd "$FRONTEND_DIR"
 
@@ -112,26 +112,28 @@ else
     echo -e "${GREEN}✅ .env file already exists${NC}"
 fi
 
-# Install dependencies
-echo "📦 Installing frontend dependencies..."
-if [ ! -d "node_modules" ]; then
-    npm install
-    echo -e "${GREEN}✅ Dependencies installed${NC}"
+# Skip npm build - Docker will handle it
+if command -v npm &> /dev/null; then
+    echo "📦 Installing frontend dependencies..."
+    if [ ! -d "node_modules" ]; then
+        npm install
+        echo -e "${GREEN}✅ Dependencies installed${NC}"
+    else
+        echo -e "${GREEN}✅ Dependencies already installed${NC}"
+    fi
+    
+    echo "🏗️  Building frontend..."
+    npm run build
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Frontend build complete${NC}"
+    else
+        echo -e "${YELLOW}⚠️  Frontend build failed, but continuing (Docker will build)${NC}"
+    fi
 else
-    echo -e "${GREEN}✅ Dependencies already installed${NC}"
+    echo -e "${YELLOW}⚠️  npm not found, skipping host build (Docker will build frontend)${NC}"
 fi
 
-# Build frontend
-echo "🏗️  Building frontend..."
-npm run build
-
-if [ $? -ne 0 ]; then
-    echo -e "${RED}❌ Frontend build failed${NC}"
-    exit 1
-fi
-
-echo -e "${GREEN}✅ Frontend build complete${NC}"
-end_step "Step 3: Frontend Build"
+end_step "Step 3: Frontend Setup"
 
 # Step 4: Build and Start All Containers
 time_step "Step 4: Docker Containers"
