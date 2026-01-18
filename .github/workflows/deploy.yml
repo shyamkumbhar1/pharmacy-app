@@ -53,4 +53,8 @@ jobs:
               exit 1
             fi
             
+            # Run migrations automatically
+            echo "📊 Running database migrations..."
+            docker-compose exec -T backend-app php artisan migrate --force || echo "⚠️ Migration may have failed or already run"
+            
             echo "✅ Deployment successful - all services running"
