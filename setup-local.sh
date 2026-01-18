@@ -1,11 +1,26 @@
 #!/bin/bash
 
+# Error handling
+set -euo pipefail
+trap 'error_handler $? $LINENO' ERR
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
+
+# Error handler function
+error_handler() {
+    local exit_code=$1
+    local line_number=$2
+    echo ""
+    echo -e "${RED}❌ Error occurred at line $line_number with exit code $exit_code${NC}"
+    echo -e "${RED}Setup failed. Please check the error above.${NC}"
+    echo ""
+    exit $exit_code
+}
 
 # Timing variables
 start_time=$(date +%s)
@@ -45,13 +60,29 @@ DOCKER_DIR="$PROJECT_ROOT/Docker"
 # Step 1: Create Docker network
 time_step "Step 1: Docker Network"
 echo -e "${YELLOW}📦 Creating Docker network...${NC}"
-docker network create pharmacy-network 2>/dev/null && echo -e "${GREEN}✅ Network created${NC}" || echo -e "${GREEN}✅ Network already exists${NC}"
+if ! docker network create pharmacy-network 2>/dev/null; then
+    if docker network inspect pharmacy-network &>/dev/null; then
+        echo -e "${GREEN}✅ Network already exists${NC}"
+    else
+        echo -e "${RED}❌ Failed to create Docker network${NC}"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✅ Network created${NC}"
+fi
 end_step "Step 1: Docker Network"
 
 # Step 2: Backend Setup
 time_step "Step 2: Backend Environment"
 echo -e "${YELLOW}📦 Setting up Backend...${NC}"
-cd "$BACKEND_DIR"
+if [ ! -d "$BACKEND_DIR" ]; then
+    echo -e "${RED}❌ Backend directory not found: $BACKEND_DIR${NC}"
+    exit 1
+fi
+cd "$BACKEND_DIR" || {
+    echo -e "${RED}❌ Failed to change to backend directory${NC}"
+    exit 1
+}
 
 # Copy .env.local to .env if not exists
 if [ ! -f .env ]; then
@@ -94,7 +125,14 @@ end_step "Step 2: Backend Environment"
 # Step 3: Frontend Setup - Skip host build (Docker handles it)
 time_step "Step 3: Frontend Setup"
 echo -e "${YELLOW}📦 Setting up Frontend...${NC}"
-cd "$FRONTEND_DIR"
+if [ ! -d "$FRONTEND_DIR" ]; then
+    echo -e "${RED}❌ Frontend directory not found: $FRONTEND_DIR${NC}"
+    exit 1
+fi
+cd "$FRONTEND_DIR" || {
+    echo -e "${RED}❌ Failed to change to frontend directory${NC}"
+    exit 1
+}
 
 # Copy .env.local to .env if not exists
 if [ ! -f .env ]; then
@@ -138,46 +176,87 @@ end_step "Step 3: Frontend Setup"
 # Step 4: Build and Start All Containers
 time_step "Step 4: Docker Containers"
 echo -e "${YELLOW}🐳 Building and starting all containers...${NC}"
-cd "$DOCKER_DIR"
+if [ ! -d "$DOCKER_DIR" ]; then
+    echo -e "${RED}❌ Docker directory not found: $DOCKER_DIR${NC}"
+    exit 1
+fi
+cd "$DOCKER_DIR" || {
+    echo -e "${RED}❌ Failed to change to Docker directory${NC}"
+    exit 1
+}
+
+# Check if docker-compose is available
+if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
+    echo -e "${RED}❌ docker-compose not found. Please install Docker Compose.${NC}"
+    exit 1
+fi
 
 # Stop and remove existing containers if any
 echo "🧹 Cleaning up existing containers..."
 docker-compose down 2>/dev/null || true
 
 # Build and start all services
-docker-compose up -d --build
+echo "🏗️  Building Docker images..."
+if ! docker-compose build; then
+    echo -e "${RED}❌ Failed to build Docker images${NC}"
+    exit 1
+fi
 
-if [ $? -ne 0 ]; then
+echo "🚀 Starting containers..."
+if ! docker-compose up -d; then
     echo -e "${RED}❌ Failed to start containers${NC}"
+    echo -e "${YELLOW}💡 Trying to clean up...${NC}"
+    docker-compose down 2>/dev/null || true
     exit 1
 fi
 
 # Wait for database
 echo "⏳ Waiting for database to be ready..."
-for i in {1..30}; do
+DB_READY=false
+for i in {1..60}; do
     if docker-compose exec -T backend-db mysqladmin ping -h localhost --silent 2>/dev/null; then
         echo -e "${GREEN}✅ Database is ready${NC}"
+        DB_READY=true
         break
     fi
-    if [ $i -eq 30 ]; then
-        echo -e "${YELLOW}⚠️  Database may not be ready, continuing anyway...${NC}"
+    if [ $i -eq 60 ]; then
+        echo -e "${YELLOW}⚠️  Database not ready after 60 seconds${NC}"
+        echo -e "${YELLOW}💡 Checking container status...${NC}"
+        docker-compose ps backend-db
     fi
     sleep 1
 done
 
+if [ "$DB_READY" = false ]; then
+    echo -e "${YELLOW}⚠️  Continuing anyway, but database may not be ready${NC}"
+fi
+
 # Generate app key if needed
 if [ "$KEY_NEEDED" = true ]; then
     echo "🔑 Generating app key..."
-    docker-compose exec -T backend-app php artisan key:generate --force 2>/dev/null || true
+    if ! docker-compose exec -T backend-app php artisan key:generate --force 2>/dev/null; then
+        echo -e "${YELLOW}⚠️  Failed to generate app key, but continuing...${NC}"
+    else
+        echo -e "${GREEN}✅ App key generated${NC}"
+    fi
 fi
 
 # Run migrations
 echo "📊 Running migrations..."
-docker-compose exec -T backend-app php artisan migrate --force 2>/dev/null || echo -e "${YELLOW}⚠️  Migrations may have failed or already run${NC}"
+if ! docker-compose exec -T backend-app php artisan migrate --force 2>/dev/null; then
+    echo -e "${YELLOW}⚠️  Migrations may have failed or already run${NC}"
+    echo -e "${YELLOW}💡 Check logs: docker-compose logs backend-app${NC}"
+else
+    echo -e "${GREEN}✅ Migrations completed${NC}"
+fi
 
 # Run seeders
 echo "🌱 Running seeders..."
-docker-compose exec -T backend-app php artisan db:seed --force 2>/dev/null || echo -e "${YELLOW}⚠️  Seeders may have failed or already run${NC}"
+if ! docker-compose exec -T backend-app php artisan db:seed --force 2>/dev/null; then
+    echo -e "${YELLOW}⚠️  Seeders may have failed or already run${NC}"
+else
+    echo -e "${GREEN}✅ Seeders completed${NC}"
+fi
 end_step "Step 4: Docker Containers"
 
 # Step 5: Health Check
@@ -186,17 +265,41 @@ echo -e "${YELLOW}🔍 Checking services...${NC}"
 sleep 5
 
 # Check backend
-if curl -s --max-time 5 http://localhost:8000 > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Backend is running: http://localhost:8000${NC}"
-else
-    echo -e "${YELLOW}⚠️  Backend may need a moment to start${NC}"
+echo "🔍 Checking backend..."
+BACKEND_RETRIES=0
+BACKEND_READY=false
+while [ $BACKEND_RETRIES -lt 10 ]; do
+    if curl -s --max-time 5 http://localhost:8000 > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Backend is running: http://localhost:8000${NC}"
+        BACKEND_READY=true
+        break
+    fi
+    BACKEND_RETRIES=$((BACKEND_RETRIES + 1))
+    sleep 2
+done
+
+if [ "$BACKEND_READY" = false ]; then
+    echo -e "${YELLOW}⚠️  Backend not responding after 20 seconds${NC}"
+    echo -e "${YELLOW}💡 Check logs: cd Docker && docker-compose logs backend-app${NC}"
 fi
 
 # Check frontend
-if curl -s --max-time 5 http://localhost:3001 > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Frontend is running: http://localhost:3001${NC}"
-else
-    echo -e "${YELLOW}⚠️  Frontend may need a moment to start${NC}"
+echo "🔍 Checking frontend..."
+FRONTEND_RETRIES=0
+FRONTEND_READY=false
+while [ $FRONTEND_RETRIES -lt 10 ]; do
+    if curl -s --max-time 5 http://localhost:3001 > /dev/null 2>&1; then
+        echo -e "${GREEN}✅ Frontend is running: http://localhost:3001${NC}"
+        FRONTEND_READY=true
+        break
+    fi
+    FRONTEND_RETRIES=$((FRONTEND_RETRIES + 1))
+    sleep 2
+done
+
+if [ "$FRONTEND_READY" = false ]; then
+    echo -e "${YELLOW}⚠️  Frontend not responding after 20 seconds${NC}"
+    echo -e "${YELLOW}💡 Check logs: cd Docker && docker-compose logs frontend${NC}"
 fi
 end_step "Step 5: Health Check"
 
