@@ -57,6 +57,18 @@ BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 DOCKER_DIR="$PROJECT_ROOT/Docker"
 
+# Detect if running on AWS EC2 and get public IP
+HOST_IP="localhost"
+if curl -s --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 > /dev/null 2>&1; then
+    HOST_IP=$(curl -s --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4)
+    echo -e "${BLUE}🌐 Detected AWS EC2 instance. Using public IP: $HOST_IP${NC}"
+    echo ""
+elif [ -n "${EC2_PUBLIC_IP:-}" ]; then
+    HOST_IP="$EC2_PUBLIC_IP"
+    echo -e "${BLUE}🌐 Using EC2 public IP from environment: $HOST_IP${NC}"
+    echo ""
+fi
+
 # Step 1: Create Docker network
 time_step "Step 1: Docker Network"
 echo -e "${YELLOW}📦 Creating Docker network...${NC}"
@@ -270,7 +282,7 @@ BACKEND_RETRIES=0
 BACKEND_READY=false
 while [ $BACKEND_RETRIES -lt 10 ]; do
     if curl -s --max-time 5 http://localhost:8000 > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Backend is running: http://localhost:8000${NC}"
+        echo -e "${GREEN}✅ Backend is running: http://$HOST_IP:8000${NC}"
         BACKEND_READY=true
         break
     fi
@@ -289,7 +301,7 @@ FRONTEND_RETRIES=0
 FRONTEND_READY=false
 while [ $FRONTEND_RETRIES -lt 10 ]; do
     if curl -s --max-time 5 http://localhost:3001 > /dev/null 2>&1; then
-        echo -e "${GREEN}✅ Frontend is running: http://localhost:3001${NC}"
+        echo -e "${GREEN}✅ Frontend is running: http://$HOST_IP:3001${NC}"
         FRONTEND_READY=true
         break
     fi
@@ -319,9 +331,9 @@ else
 fi
 echo ""
 echo -e "${BLUE}📋 Access your application:${NC}"
-echo "   Backend:  http://localhost:8000"
-echo "   Frontend: http://localhost:3001"
-echo "   API:      http://localhost:8000/api"
+echo "   Backend:  http://$HOST_IP:8000"
+echo "   Frontend: http://$HOST_IP:3001"
+echo "   API:      http://$HOST_IP:8000/api"
 echo ""
 echo -e "${BLUE}📝 Useful commands:${NC}"
 echo "   Stop all:     cd Docker && docker-compose down"
