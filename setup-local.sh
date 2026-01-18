@@ -57,6 +57,31 @@ BACKEND_DIR="$PROJECT_ROOT/backend"
 FRONTEND_DIR="$PROJECT_ROOT/frontend"
 DOCKER_DIR="$PROJECT_ROOT/Docker"
 
+# Function to get current public IP (always fresh)
+get_current_public_ip() {
+    local ip=""
+    
+    # Method 1: AWS EC2 metadata service (most reliable for EC2)
+    if ip=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null) && [ -n "$ip" ] && [[ "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+        echo "$ip"
+        return 0
+    fi
+    
+    # Method 2: External service (if metadata fails)
+    if ip=$(curl -s --max-time 3 https://checkip.amazonaws.com 2>/dev/null | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'); then
+        echo "$ip"
+        return 0
+    fi
+    
+    # Method 3: Alternative external service
+    if ip=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null | grep -E '^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'); then
+        echo "$ip"
+        return 0
+    fi
+    
+    return 1
+}
+
 # Detect if running on AWS EC2 and get public IP
 HOST_IP="localhost"
 AWS_IP=""
@@ -65,11 +90,13 @@ AWS_IP=""
 if [ -n "${PUBLIC_IP:-}" ]; then
     HOST_IP="$PUBLIC_IP"
     echo -e "${BLUE}🌐 Using manually set public IP: $HOST_IP${NC}"
+    echo -e "${YELLOW}⚠️  Note: If your EC2 IP changes, update PUBLIC_IP or use Elastic IP${NC}"
     echo ""
-# Try to get AWS public IP from metadata service
-elif AWS_IP=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null) && [ -n "$AWS_IP" ] && [[ "$AWS_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+# Try to get AWS public IP (always fresh, handles IP changes)
+elif AWS_IP=$(get_current_public_ip) && [ -n "$AWS_IP" ]; then
     HOST_IP="$AWS_IP"
-    echo -e "${BLUE}🌐 Detected AWS EC2 instance. Using public IP: $HOST_IP${NC}"
+    echo -e "${BLUE}🌐 Detected AWS EC2 instance. Current public IP: $HOST_IP${NC}"
+    echo -e "${YELLOW}💡 Tip: Use Elastic IP for static IP address${NC}"
     echo ""
 elif [ -n "${EC2_PUBLIC_IP:-}" ]; then
     HOST_IP="$EC2_PUBLIC_IP"
