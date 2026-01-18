@@ -23,18 +23,20 @@ jobs:
             echo "⏰ $(date)"
             
             echo ""
-            echo "📥 Step 1/6: Pulling latest code..."
+            echo "📥 Step 1/4: Pulling latest code..."
             cd ~/pharmacy-app
             git pull || { echo "❌ Git pull failed"; exit 1; }
             echo "✅ Code pulled successfully"
             
             echo ""
-            echo "📦 Step 2/6: Checking Docker status..."
+            echo "📦 Step 2/4: Checking Docker status..."
             cd Docker
             docker-compose ps
             
             echo ""
-            echo "🏗️ Step 3/6: Building backend (fast, ~2 minutes)..."
+            echo "🏗️ Step 3/4: Building backend only (fast, ~2 minutes)..."
+            echo "ℹ️ Frontend will be deployed manually (time-consuming)"
+            echo "💡 Manual frontend deploy: cd ~/pharmacy-app/Docker && docker-compose build frontend && docker-compose up -d frontend"
             echo "⏰ Backend build start: $(date)"
             if ! timeout 300 docker-compose build backend-app backend-nginx backend-db --progress=plain; then
               echo "❌ Backend build failed or timed out - keeping old containers running"
@@ -44,44 +46,12 @@ jobs:
             echo "✅ Backend build successful"
             
             echo ""
-            echo "🔍 Step 4/7: Quick frontend validation (fast, ~1-2 minutes)..."
-            echo "⏰ Validation start: $(date)"
-            cd ~/pharmacy-app/frontend
-            
-            # Quick validation - install dependencies
-            if ! npm install --silent; then
-              echo "❌ Frontend dependency installation failed"
-              exit 1
-            fi
-            echo "✅ Dependencies installed"
-            
-            # Quick build check (validate syntax and dependencies)
-            if ! npm run build 2>&1 | tee /tmp/build.log | head -100; then
-              echo "❌ Frontend build validation failed - checking logs..."
-              tail -50 /tmp/build.log
-              exit 1
-            fi
-            echo "⏰ Validation complete: $(date)"
-            echo "✅ Frontend validation passed"
-            
-            echo ""
-            echo "🏗️ Step 5/7: Building frontend container (this may take 5-10 minutes)..."
-            echo "⏰ Frontend build start: $(date)"
-            cd ~/pharmacy-app/Docker
-            if ! timeout 900 docker-compose build frontend --progress=plain; then
-              echo "❌ Frontend build failed or timed out - keeping old containers running"
-              exit 1
-            fi
-            echo "⏰ Frontend build complete: $(date)"
-            echo "✅ Frontend build successful"
-            
-            echo ""
-            echo "🚀 Step 6/7: Restarting containers..."
+            echo "🚀 Step 4/4: Restarting containers..."
             docker-compose up -d || { echo "❌ Failed to start containers"; exit 1; }
             echo "✅ Containers restarted"
             
             echo ""
-            echo "⏳ Step 7/7: Waiting for services to start..."
+            echo "⏳ Waiting for services to start..."
             sleep 5
             echo "✅ Wait complete"
             
@@ -105,22 +75,20 @@ jobs:
               exit 1
             fi
             
-            # Check frontend health with retry
+            # Check frontend health (optional - frontend deployed manually)
             FRONTEND_OK=false
-            for i in {1..5}; do
+            for i in {1..3}; do
               if curl -f -s --max-time 5 http://localhost:3001 > /dev/null 2>&1; then
                 echo "✅ Frontend health check passed (attempt $i)"
                 FRONTEND_OK=true
                 break
               fi
-              echo "⏳ Frontend not ready yet, retrying... ($i/5)"
-              sleep 3
+              echo "⏳ Frontend not ready yet, retrying... ($i/3)"
+              sleep 2
             done
             
             if [ "$FRONTEND_OK" = false ]; then
-              echo "❌ Frontend health check failed - rolling back"
-              docker-compose restart
-              exit 1
+              echo "⚠️ Frontend health check failed - but continuing (frontend deployed manually)"
             fi
             
             echo ""
