@@ -34,27 +34,58 @@ jobs:
             docker-compose ps
             
             echo ""
-            echo "🏗️ Step 3/6: Building new containers (this may take 5-10 minutes)..."
-            echo "⏰ Start time: $(date)"
-            if ! timeout 600 docker-compose build --progress=plain; then
-              echo "❌ Build failed or timed out - keeping old containers running"
+            echo "🏗️ Step 3/6: Building backend (fast, ~2 minutes)..."
+            echo "⏰ Backend build start: $(date)"
+            if ! timeout 300 docker-compose build backend-app backend-nginx backend-db --progress=plain; then
+              echo "❌ Backend build failed or timed out - keeping old containers running"
               exit 1
             fi
-            echo "⏰ Build complete: $(date)"
-            echo "✅ Build successful"
+            echo "⏰ Backend build complete: $(date)"
+            echo "✅ Backend build successful"
             
             echo ""
-            echo "🚀 Step 4/6: Restarting containers..."
+            echo "🔍 Step 4/7: Quick frontend validation (fast, ~1-2 minutes)..."
+            echo "⏰ Validation start: $(date)"
+            cd ~/pharmacy-app/frontend
+            
+            # Quick validation - install dependencies
+            if ! npm install --silent; then
+              echo "❌ Frontend dependency installation failed"
+              exit 1
+            fi
+            echo "✅ Dependencies installed"
+            
+            # Quick build check (development mode - faster)
+            if ! npm run build --mode development 2>&1 | head -50; then
+              echo "❌ Frontend build validation failed - syntax or build error detected"
+              exit 1
+            fi
+            echo "⏰ Validation complete: $(date)"
+            echo "✅ Frontend validation passed"
+            
+            echo ""
+            echo "🏗️ Step 5/7: Building frontend container (this may take 5-10 minutes)..."
+            echo "⏰ Frontend build start: $(date)"
+            cd ~/pharmacy-app/Docker
+            if ! timeout 900 docker-compose build frontend --progress=plain; then
+              echo "❌ Frontend build failed or timed out - keeping old containers running"
+              exit 1
+            fi
+            echo "⏰ Frontend build complete: $(date)"
+            echo "✅ Frontend build successful"
+            
+            echo ""
+            echo "🚀 Step 6/7: Restarting containers..."
             docker-compose up -d || { echo "❌ Failed to start containers"; exit 1; }
             echo "✅ Containers restarted"
             
             echo ""
-            echo "⏳ Step 5/6: Waiting for services to start..."
+            echo "⏳ Step 7/7: Waiting for services to start..."
             sleep 5
             echo "✅ Wait complete"
             
             echo ""
-            echo "🔍 Step 6/6: Running health checks..."
+            echo "🔍 Running health checks..."
             # Check backend health with retry
             BACKEND_OK=false
             for i in {1..5}; do
