@@ -61,8 +61,13 @@ DOCKER_DIR="$PROJECT_ROOT/Docker"
 HOST_IP="localhost"
 AWS_IP=""
 
+# Check for manual IP override first (for AWS if metadata doesn't work)
+if [ -n "${PUBLIC_IP:-}" ]; then
+    HOST_IP="$PUBLIC_IP"
+    echo -e "${BLUE}🌐 Using manually set public IP: $HOST_IP${NC}"
+    echo ""
 # Try to get AWS public IP from metadata service
-if AWS_IP=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null) && [ -n "$AWS_IP" ] && [[ "$AWS_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+elif AWS_IP=$(curl -s --max-time 3 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null) && [ -n "$AWS_IP" ] && [[ "$AWS_IP" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
     HOST_IP="$AWS_IP"
     echo -e "${BLUE}🌐 Detected AWS EC2 instance. Using public IP: $HOST_IP${NC}"
     echo ""
