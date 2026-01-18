@@ -1,0 +1,73 @@
+services:
+  backend-app:
+    build:
+      context: ../backend
+      dockerfile: ../Docker/Dockerfile.backend
+    container_name: pharmacy_backend_app
+    restart: unless-stopped
+    volumes:
+      - ../backend:/var/www/html
+      - vendor-data:/var/www/html/vendor
+    networks:
+      - pharmacy-network
+    environment:
+      - DB_HOST=backend-db
+      - DB_DATABASE=${DB_DATABASE:-pharmacy_db}
+      - DB_USERNAME=${DB_USERNAME:-pharmacy_user}
+      - DB_PASSWORD=${DB_PASSWORD:-root}
+    depends_on:
+      - backend-db
+
+  backend-nginx:
+    image: nginx:alpine
+    container_name: pharmacy_backend_nginx
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:80"
+    volumes:
+      - ../backend:/var/www/html
+      - ./nginx/backend.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - pharmacy-network
+    depends_on:
+      - backend-app
+
+  backend-db:
+    image: mysql:8.0
+    container_name: pharmacy_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE:-pharmacy_db}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-root}
+      MYSQL_USER: ${DB_USERNAME:-pharmacy_user}
+    ports:
+      - "${DB_PORT:-3307}:3306"
+    volumes:
+      - dbdata:/var/lib/mysql
+    networks:
+      - pharmacy-network
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../Docker/Dockerfile.frontend
+    container_name: pharmacy_frontend
+    restart: unless-stopped
+    ports:
+      - "3001:80"
+    volumes:
+      - ../frontend/dist:/usr/share/nginx/html
+      - ./nginx/frontend.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - pharmacy-network
+    depends_on:
+      - backend-nginx
+
+networks:
+  pharmacy-network:
+    external: true
+
+volumes:
+  dbdata:
+  vendor-data:
