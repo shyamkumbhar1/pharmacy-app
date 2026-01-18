@@ -55,9 +55,10 @@ jobs:
             fi
             echo "✅ Dependencies installed"
             
-            # Quick build check (development mode - faster)
-            if ! npm run build --mode development 2>&1 | head -50; then
-              echo "❌ Frontend build validation failed - syntax or build error detected"
+            # Quick build check (validate syntax and dependencies)
+            if ! npm run build 2>&1 | tee /tmp/build.log | head -100; then
+              echo "❌ Frontend build validation failed - checking logs..."
+              tail -50 /tmp/build.log
               exit 1
             fi
             echo "⏰ Validation complete: $(date)"
