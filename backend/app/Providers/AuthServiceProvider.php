@@ -13,13 +13,7 @@ class AuthServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Gate::define('admin', function ($user) {
-            return $user->isAdmin();
-        });
-
-        Gate::define('pharmacist', function ($user) {
-            return $user->isPharmacist();
-        });
+        // Gates removed - methods don't exist in simplified User model
     }
 }
 
